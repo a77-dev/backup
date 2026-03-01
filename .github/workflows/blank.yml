@@ -1,0 +1,72 @@
+name: Firebase Realtime Database Backup (Artifact)
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"  
+
+jobs: 
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Firebase Admin SDK
+        run: npm install firebase-admin
+
+      - name: Create backup script
+        run: |
+          cat << 'EOF' > backup.js
+          const fs = require("fs");
+          const admin = require("firebase-admin");
+
+          const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            databaseURL: process.env.FIREBASE_DATABASE_URL
+          });
+
+          async function backup() {
+            const snapshot = await admin.database().ref("/").once("value");
+            const data = snapshot.val();
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            const filename = `realtime-db-backup-${timestamp}.txt`;
+
+            fs.writeFileSync(filename, JSON.stringify(data, null, 2));
+            console.log("BACKUP_FILE=" + filename);
+          }
+          
+          backup()
+            .then(() => process.exit(0))
+              .catch(err => {
+                console.error(err);
+                process.exit(1);
+            });
+
+      - name: Run backup
+        id: backup
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+        run: |
+          node backup.js
+          FILE=$(ls realtime-db-backup-*.txt)
+          echo "file=$FILE" >> $GITHUB_OUTPUT
+
+      - name: Upload backup as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firebase-realtime-backup
+          path: ${{ steps.backup.outputs.file }}
+          retention-days: 30
+
+      - name: Output download link
+        run: |
+          echo "### ✅ Firebase Backup Ready" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⬇️ Download it from the **Artifacts** section of this workflow run." >> $GITHUB_STEP_SUMMARY
