@@ -3,7 +3,6 @@ name: Firebase Realtime Database Backup (Artifact)
 on:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch:
 
 jobs:
   backup:
