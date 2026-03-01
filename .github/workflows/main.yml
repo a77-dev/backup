@@ -1,11 +1,8 @@
-name: Firebase Realtime Database Backup
-
-permissions:
-  contents: write
+name: Firebase Realtime Database Backup (Artifact)
 
 on:
   schedule:
-    - cron: "*/5 * * * *" # every 5 minutes
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -13,9 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -41,14 +35,11 @@ jobs:
             const snapshot = await admin.database().ref("/").once("value");
             const data = snapshot.val();
 
-            const dir = "backups";
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-
             const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-            const file = `${dir}/backup-${timestamp}.json`;
+            const filename = `realtime-db-backup-${timestamp}.txt`;
 
-            fs.writeFileSync(file, JSON.stringify(data, null, 2));
-            console.log("Backup saved:", file);
+            fs.writeFileSync(filename, JSON.stringify(data, null, 2));
+            console.log("BACKUP_FILE=" + filename);
           }
 
           backup().catch(err => {
@@ -58,15 +49,24 @@ jobs:
           EOF
 
       - name: Run backup
+        id: backup
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
-        run: node backup.js
-
-      - name: Commit and push backup
         run: |
-          git config user.name "firebase-backup-bot"
-          git config user.email "backup@github.com"
-          git add backups/
-          git commit -m "Realtime DB backup $(date -u)" || exit 0
-          git push
+          node backup.js
+          FILE=$(ls realtime-db-backup-*.txt)
+          echo "file=$FILE" >> $GITHUB_OUTPUT
+
+      - name: Upload backup as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firebase-realtime-backup
+          path: ${{ steps.backup.outputs.file }}
+          retention-days: 30
+
+      - name: Output download link
+        run: |
+          echo "### ✅ Firebase Backup Ready" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⬇️ Download it from the **Artifacts** section of this workflow run." >> $GITHUB_STEP_SUMMARY
