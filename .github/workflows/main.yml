@@ -2,9 +2,9 @@ name: Firebase Realtime Database Backup (Artifact)
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/5 * * * *"  
 
-jobs:
+jobs: 
   backup:
     runs-on: ubuntu-latest
 
