@@ -41,12 +41,13 @@ jobs:
             fs.writeFileSync(filename, JSON.stringify(data, null, 2));
             console.log("BACKUP_FILE=" + filename);
           }
-
-          backup().catch(err => {
-            console.error(err);
-            process.exit(1);
-          });
-          EOF
+          
+          backup()
+            .then(() => process.exit(0))
+              .catch(err => {
+                console.error(err);
+                process.exit(1);
+            });
 
       - name: Run backup
         id: backup
