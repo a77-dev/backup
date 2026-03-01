@@ -1,0 +1,69 @@
+name: Firebase Realtime Database Backup
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # every 5 minutes
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Firebase Admin SDK
+        run: npm install firebase-admin
+
+      - name: Create backup script
+        run: |
+          cat << 'EOF' > backup.js
+          const fs = require("fs");
+          const admin = require("firebase-admin");
+
+          const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            databaseURL: process.env.FIREBASE_DATABASE_URL
+          });
+
+          async function backup() {
+            const snapshot = await admin.database().ref("/").once("value");
+            const data = snapshot.val();
+
+            const dir = "backups";
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            const file = `${dir}/backup-${timestamp}.json`;
+
+            fs.writeFileSync(file, JSON.stringify(data, null, 2));
+            console.log("Backup saved:", file);
+          }
+
+          backup().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Run backup
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+        run: node backup.js
+
+      - name: Commit and push backup
+        run: |
+          git config user.name "firebase-backup-bot"
+          git config user.email "backup@github.com"
+          git add backups/
+          git commit -m "Realtime DB backup $(date -u)" || exit 0
+          git push
